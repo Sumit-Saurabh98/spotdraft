@@ -8,12 +8,21 @@ const asanaToken = '1/1205222159498417:32b76fe957dca8fdf1598c0ad97cfecc';
 const airtableAccessToken = 'patWkbLDA1rXameWo';
 const airtableBaseId = 'appYk2JxgtCyKOjPZ';
 
+// Middleware
 app.use(bodyParser.json());
 
+// Asana Webhook route
 app.post('/asana-webhook', (req, res) => {
-  const { resource, action } = req.body;
+  const payload = req.body;
 
-  if (resource === 'task' && action === 'added') {
+  // Check if the request contains a "challenge" property
+  if (payload.challenge) {
+    // Respond with the handshake secret to verify the webhook setup
+    res.json({ challenge: payload.challenge });
+  } else {
+    // Handle the incoming webhook notification
+    // Process the payload here and copy the task to Airtable
+
     const asanaClient = Asana.Client.create().useAccessToken(asanaToken);
 
     asanaClient.tasks.findById(req.body.data.id)
@@ -34,7 +43,7 @@ app.post('/asana-webhook', (req, res) => {
 
         axios.post(airtableEndpoint, airtableData, {
           headers: {
-            Authorization: `Bearer ${airtableAccessToken}`,
+            Authorization: `Bearer ${airtableApiKey}`,
           }
         })
         .then(() => {
@@ -47,11 +56,11 @@ app.post('/asana-webhook', (req, res) => {
       .catch((error) => {
         console.error('Error fetching task from Asana:', error);
       });
+
+    // Send a response back to Asana (should be done to acknowledge the webhook)
+    res.sendStatus(200);
   }
-
-  res.sendStatus(200);
 });
-
 app.get("/task", (req, res) => {
   res.json({task:"task"});
 })
