@@ -1,49 +1,62 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const Airtable = require('airtable');
-
 const app = express();
-const PORT = 8000;
+const bodyParser = require('body-parser');
+const axios = require('axios');
+const { Asana } = require('asana');
+
+const asanaToken = '1/1205222159498417:32b76fe957dca8fdf1598c0ad97cfecc';
+const airtableAccessToken = 'patWkbLDA1rXameWo';
+const airtableBaseId = 'appYk2JxgtCyKOjPZ';
 
 app.use(bodyParser.json());
 
-const apiKey = 'patWkbLDA1rXameWo.7d8e8db8c4354a740f053b7d519af926791a8d001f3ef13823c1d58f8f4bd5d7';
-const baseId = 'appuewWpo1LEKwKRM';
-const tableName = 'Asana Tasks';
-
-const base = new Airtable({ apiKey }).base(baseId);
-
 app.post('/asana-webhook', (req, res) => {
-  const eventData = req.body.events[0];
-  if (eventData.action === 'added') {
-    const taskData = eventData.resource;
-    console.log('New task added:');
-    console.log(taskData);
-    base(tableName).create([
-      {
-        fields: {
-          'Task ID': taskData.gid,
-          Name: taskData.name,
-          Assignee: taskData.assignee ? taskData.assignee.name : null,
-          'Due Date': taskData.due_on,
-          Description: taskData.notes,
-        },
-      },
-    ], (err, records) => {
-      if (err) {
-        console.error(err);
-        return;
-      }
-      console.log('Record added to Airtable:', records[0].getId());
-    });
+  const { resource, action } = req.body;
+
+  if (resource === 'task' && action === 'added') {
+    const asanaClient = Asana.Client.create().useAccessToken(asanaToken);
+
+    asanaClient.tasks.findById(req.body.data.id)
+      .then((task) => {
+        const { id, name, assignee, due_on, notes } = task;
+
+        const airtableData = {
+          fields: {
+            'Task ID': id,
+            Name: name,
+            Assignee: assignee.name,
+            'Due Date': due_on,
+            Description: notes,
+          }
+        };
+
+        const airtableEndpoint = `https://api.airtable.com/v0/${airtableBaseId}/Asana%20Tasks`;
+
+        axios.post(airtableEndpoint, airtableData, {
+          headers: {
+            Authorization: `Bearer ${airtableAccessToken}`,
+          }
+        })
+        .then(() => {
+          console.log(`Task with ID ${id} has been copied to Airtable.`);
+        })
+        .catch((error) => {
+          console.error('Error copying task to Airtable:', error);
+        });
+      })
+      .catch((error) => {
+        console.error('Error fetching task from Asana:', error);
+      });
   }
+
   res.sendStatus(200);
 });
 
-app.get('/task', (req, res) => {
-  res.json({ task: "task" });
-});
+app.get("/task", (req, res) => {
+  res.json({task:"task"});
+})
 
+const PORT = 8000;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
